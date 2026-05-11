@@ -1,0 +1,7 @@
+{
+    "require": {
+        "ext-mbstring": "*",
+        "ext-mysqli": "*",
+        "digitalstars/simplevk": "^3.9"
+    }
+}
