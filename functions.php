@@ -1,148 +1,126 @@
 <?php
 
-declare(strict_types=1); // Строгая типизация
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
 
-// Конфигурация подключения к БД
-const DB_HOST = '127.0.0.1';      // Хост БД (можно заменить на IP-адрес, например, '127.0.0.1')
-const DB_PORT = 3308;             // Порт MySQL (по умолчанию 3306)
-const DB_USER = 'root';   // Имя пользователя БД
-const DB_PASSWORD = 'qwerty123_qw'; // Пароль пользователя БД
-const DB_NAME = 'shop';  // Название базы данных
+$products = [
+    ["id" => 1, "name" => "Шина Michelin", "price" => 10000, "description" => "Летние шины, R16"],
+    ["id" => 2, "name" => "Фильтр масляный", "price" => 500, "description" => "Для двигателя 1.6"],
+    ["id" => 3, "name" => "Свечи зажигания", "price" => 800, "description" => "Иридиевые, комплект 4 шт."],
+    ["id" => 4, "name" => "Тормозные колодки", "price" => 3000, "description" => "Передние, комплект"],
+];
 
-/**
- * Устанавливает соединение с БД
- * @return mysqli Объект соединения с БД
- * @throws Exception Если подключение не удалось
- */
-function connectDB(): mysqli
+$cart = [];
+
+$config = [
+    "smtp_server" => "smtp.gmail.com",
+    "smtp_port" => 587,
+    "email_address" => "magazine@gmail.com",
+    "email_password" => "пароль",
+    "admin_email" => "manager@gmail.com",
+];
+
+function showCatalog(): void
 {
-    $conn = new mysqli(DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, DB_PORT);
+    global $products;
+    echo "\nКАТАЛОГ ТОВАРОВ" . PHP_EOL;
+    foreach ($products as $product) {
+        echo "ID: {$product['id']}, Название: {$product['name']}, Цена: {$product['price']} руб., Описание: {$product['description']}" . PHP_EOL;
+    }
+    echo "----------------------\n";
+}
 
-    // Проверка успешности подключения
-    if ($conn->connect_error) {
-        throw new Exception("Не удалось подключиться к БД: " . $conn->connect_error);
+function addToCart(int $productId): void
+{
+    global $products, $cart;
+    foreach ($products as $product) {
+        if ($product['id'] == $productId) {
+            $cart[] = $product;
+            echo "\nТовар '{$product['name']}' добавлен в корзину!" . PHP_EOL;
+            return;
+        }
+    }
+    echo "\nТовар не найден!" . PHP_EOL;
+}
+
+function showCart(): void
+{
+    global $cart;
+    if (empty($cart)) {
+        echo "\nВаша корзина пуста!" . PHP_EOL;
+        return;
     }
 
-    // Устанавливаем кодировку соединения (рекомендуется UTF-8)
-    $conn->set_charset("utf8mb4");
-
-    return $conn;
+    echo "\nВАША КОРЗИНА" . PHP_EOL;
+    $total = 0;
+    foreach ($cart as $product) {
+        echo "Название: {$product['name']}, Цена: {$product['price']} руб." . PHP_EOL;
+        $total += $product['price'];
+    }
+    echo "Общая сумма: {$total} руб." . PHP_EOL;
+    echo "----------------------\n";
 }
 
-// CRUD для товаров
-
-/**
- * Создаёт новый товар
- * @param string $name Название товара
- * @param float $price Цена товара
- * @param string $category Категория товара
- * @param int $stock Количество на складе
- * @return bool true при успешном создании, false — иначе
- */
-function createProduct(string $name, float $price, string $category, int $stock): bool
+function confirmPayment(): void
 {
-    $db = connectDB();
-    $sql = "INSERT INTO products (name, price, category, stock) VALUES (?, ?, ?, ?)";
-    $stmt = $db->prepare($sql);
-    $result = $stmt->bind_param("ssdi", $name, $price, $category, $stock);
-    $stmt->execute();
-    $db->close();
-    return $result;
-}
+    global $cart, $config;
+    if (empty($cart)) {
+        echo "\nКорзина пуста! Добавьте товары." . PHP_EOL;
+        return;
+    }
 
-/**
- * Получает список товаров
- * @param string|null $category Фильтрация по категории (опционально)
- * @return array Список товаров в виде ассоциативного массива
- */
-function readProducts(?string $category = null): array
-{
-    $db = connectDB();
-    $sql = "SELECT * FROM products";
+    $total = array_sum(array_column($cart, 'price'));
+    echo "\nПодтверждение оплаты:" . PHP_EOL;
+    echo "Общая сумма: {$total} руб." . PHP_EOL;
 
-    if ($category) {
-        $sql .= " WHERE category = ?";
-        $stmt = $db->prepare($sql);
-        $stmt->bind_param("s", $category);
-        $stmt->execute();
-        $result = $stmt->get_result();
+    echo "Подтвердите оплату (да/нет): ";
+    $answer = trim(fgets(STDIN));
+
+    if (strtolower($answer) === 'да') {
+        echo "\nОплата подтверждена! Спасибо за покупку!" . PHP_EOL;
+        sendOrderNotification($cart, $total);
+        $cart = [];
     } else {
-        $result = $db->query($sql);
+        echo "\nОплата отменена." . PHP_EOL;
     }
-
-    $products = $result->fetch_all(MYSQLI_ASSOC);
-    $db->close();
-    return $products;
 }
 
-/**
- * Обновляет товар
- * @param int $id ID товара
- * @param string $field Имя поля для обновления (например, 'price')
- * @param mixed $value Новое значение поля
- * @return bool true при успешном обновлении, false — иначе
- */
-function updateProduct(int $id, string $field, mixed $value): bool
+function sendOrderNotification(array $cart, float $total): void
 {
-    $db = connectDB();
-    $sql = "UPDATE products SET $field = ? WHERE id = ?";
-    $stmt = $db->prepare($sql);
+    global $config;
 
-    switch (gettype($value)) {
-        case 'string':
-            $stmt->bind_param("si", $value, $id);
-            break;
-        case 'integer':
-            $stmt->bind_param("ii", $value, $id);
-            break;
-        case 'double':
-            $stmt->bind_param("di", $value, $id);
-            break;
-        default:
-            throw new Exception("Неподдерживаемый тип значения: " . gettype($value));
+    require __DIR__ . '/vendor/phpmailer/phpmailer/src/Exception.php';
+    require __DIR__ . '/vendor/phpmailer/phpmailer/src/PHPMailer.php';
+    require __DIR__ . '/vendor/phpmailer/phpmailer/src/SMTP.php';
+
+    $mail = new PHPMailer(true);
+
+    try {
+        $mail->isSMTP();
+        $mail->Host = $config['smtp_server'];
+        $mail->SMTPAuth = true;
+        $mail->Username = $config['email_address'];
+        $mail->Password = $config['email_password'];
+        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->Port = $config['smtp_port'];
+
+        $mail->setFrom($config['email_address'], 'Интернет-магазин');
+        $mail->addAddress($config['admin_email'], 'Администратор');
+
+        $mail->Subject = 'Новый заказ в интернет-магазине "Автомагазин"';
+        $body = "Новый заказ подтверждён!\n\n";
+        $body .= "Детали заказа:\n";
+        foreach ($cart as $product) {
+            $body .= "- {$product['name']} — {$product['price']} руб.\n";
+        }
+        $body .= "\nОбщая сумма: {$total} руб.\n";
+        $body .= "Дата заказа: " . date('Y-m-d H:i:s') . "\n";
+        $mail->Body = $body;
+
+        $mail->send();
+        echo "Уведомление администратору отправлено!" . PHP_EOL;
+    } catch (Exception $e) {
+        echo "Ошибка при отправке уведомления: {$e->getMessage()}" . PHP_EOL;
     }
-
-    $result = $stmt->execute();
-    $db->close();
-    return $result;
-}
-
-/**
- * Удаляет товар
- * @param int $id ID товара для удаления
- * @return bool true при успешном удалении, false — иначе
- */
-function deleteProduct(int $id): bool
-{
-    $db = connectDB();
-    $sql = "DELETE FROM products WHERE id = ?";
-    $stmt = $db->prepare($sql);
-    $stmt->bind_param("i", $id);
-    $result = $stmt->execute();
-    $db->close();
-    return $result;
-}
-
-// Пример функции для получения статистики
-/**
- * Получает количество посещений за указанный период
- * @param string $period Период ('day', 'week', 'month')
- * @return int Количество посещений
- */
-function getVisits(string $period): int
-{
-    $db = connectDB();
-    $days = match ($period) {
-        'day' => 1,
-        'week' => 7,
-        'month' => 30,
-        default => 1
-    };
-
-    $sql = "SELECT COUNT(*) as count FROM visits WHERE date >= CURDATE() - INTERVAL $days DAY";
-    $result = $db->query($sql);
-    $row = $result->fetch_assoc();
-    $db->close();
-    return (int)$row['count'];
 }
 ?>
