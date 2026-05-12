@@ -1,5 +1,4 @@
 <?php
-
 require_once 'vendor/autoload.php';
 require_once 'config.php';
 require_once 'Database.php';
@@ -10,13 +9,11 @@ $config = require 'config.php';
 $db = new Database($config);
 $vk = new LongPoll($config['vk_token'], $config['vk_api_version']);
 
-// Обрабатываем события LongPoll
 $vk->listen(function () use ($vk, $db, $config) {
     try {
-        // Исправляем метод получения обновления — проверяем документацию LongPoll
-        $updates = $vk->getUpdates(); // Вместо getUpdate()
+        $updates = $vk->getUpdates();
         foreach ($updates as $update) {
-            if ($update['object']['message']['peer_id'] === $vk->getGroupId()) { // Проверяем, что сообщение в группу
+            if ($update['object']['message']['peer_id'] === $vk->getGroupId()) {
                 $user_id = $update['object']['message']['from_id'];
                 $text = mb_strtolower(trim($update['object']['message']['text']));
 
@@ -31,7 +28,6 @@ $vk->listen(function () use ($vk, $db, $config) {
             }
         }
     } catch (\DigitalStars\SimpleVK\SimpleVkException $e) {
-        // Обрабатываем исключения SimpleVK
         error_log('SimpleVK Exception: ' . $e->getMessage());
         $vk->msg('Произошла ошибка. Попробуйте позже.')->send($user_id);
     } catch (\Exception $e) {
@@ -40,10 +36,8 @@ $vk->listen(function () use ($vk, $db, $config) {
     }
 });
 
-// Запуск бота — исправляем метод
-$vk->start(); // Вместо run() — проверяем актуальную документацию LongPoll
+$vk->start();
 
-// Функция меню
 function sendMenu($uid, $vk) {
     $kbd = [['text' => 'Добавить товар', 'color' => 'primary'], ['text' => 'Корзина', 'color' => 'secondary']];
     $vk->msg('Меню')->kbd($kbd)->send($uid);
