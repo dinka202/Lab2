@@ -2,6 +2,7 @@
     "require": {
         "ext-mbstring": "*",
         "ext-mysqli": "*",
-        "digitalstars/simplevk": "^3.9"
+        "digitalstars/simplevk": "^3.9",
+        "phpmailer/phpmailer": "^7.0"
     }
 }
