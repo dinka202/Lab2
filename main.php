@@ -1,45 +1,58 @@
 <?php
+require 'functions.php';
 
-require_once 'functions.php';
+// Имитация бота: считываем команду из консоли
+$command = $_GET['cmd'] ?? ''; // В реальном боте — из сообщения
+$params = explode(' ', $command);
 
-echo "Добро пожаловать в интернет‑магазин 'Автомагазин'!\n";
+// Аутентификация
+if ($params === '/админ' && $params === 'пароль123') {
+    echo "Доступ разрешён!\n";
+    processAdminCommand(array_slice($params, 2));
+} else {
+    echo "Доступ запрещён!\n";
+}
 
-while (true) {
-    echo "\nМеню:\n";
-    echo "1. Просмотреть каталог товаров\n";
-    echo "2. Добавить товар в корзину (укажите ID товара)\n";
-    echo "3. Посмотреть корзину\n";
-    echo "4. Подтвердить оплату\n";
-    echo "5. Выйти\n";
+function processAdminCommand($params) {
+    global $db;
 
-    echo "\nВыберите действие (1–5): ";
-    $choice = trim(fgets(STDIN));
-
-    switch ($choice) {
-        case '1':
-            showCatalog();
+    switch ($params) {
+        // CRUD для товаров
+        case 'добавить_товар':
+            createProduct($params, $params, $params, $params);
+            echo "Товар добавлен!\n";
+            break;
+        case 'показать_товары':
+            $products = readProducts($params ?? null);
+            foreach ($products as $p) {
+                echo "$p[id]. $p[name] ($p[price] руб.)\n";
+            }
+            break;
+        case 'обновить_товар':
+            updateProduct($params, $params, $params);
+            echo "Товар обновлён!\n";
+            break;
+        case 'удалить_товар':
+            deleteProduct($params);
+            echo "Товар удалён!\n";
             break;
 
-        case '2':
-            echo "Введите ID товара: ";
-            $productId = (int)trim(fgets(STDIN));
-            addToCart($productId);
+        // Статистика
+        case 'статистика_посещений':
+            $visits = getVisits($params);
+            echo "Посещений за $params: $visits\n";
             break;
-
-        case '3':
-            showCart();
+        case 'статистика_продаж':
+            $sales = getSales($params);
+            echo "Продаж за $params: {$sales['count']} (на {$sales['total']} руб.)\n";
             break;
-
-        case '4':
-            confirmPayment();
+        case 'статистика_прибыли':
+            $profit = getProfit($params);
+            echo "Прибыль за $params: $profit руб.\n";
             break;
-
-        case '5':
-            echo "До свидания!\n";
-            exit(0);
 
         default:
-            echo "\nНеверный выбор. Попробуйте ещё раз.\n";
+            echo "Неизвестная команда!\n";
     }
 }
 ?>
